@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>צובעים את ישראל - מעקב טיולים</title>
+    
+    <!-- ספריית המפות Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body, html {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background-color: #1a1a1a;
+        }
+
+        /* אזור המפה */
+        #map {
+            height: 100%;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* פאנל עליון - סטטיסטיקות */
+        .top-bar {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            padding: 12px 16px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title-area h1 {
+            font-size: 1.1rem;
+            color: #d32f2f;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .title-area p {
+            font-size: 0.8rem;
+            color: #555;
+            margin-top: 2px;
+        }
+
+        .wake-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 2px 6px;
+            border-radius: 6px;
+            border: 1px solid #c8e6c9;
+            display: none;
+        }
+
+        .stats-badge {
+            background: #ffebee;
+            color: #c62828;
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-align: center;
+            border: 1px solid #ffcdd2;
+            min-width: 85px;
+        }
+
+        /* פאנל שליטה תחתון */
+        .controls-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 12px;
+            right: 12px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            padding: 14px;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* בורר עובי מברשת */
+        .brush-selector {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f5f5f5;
+            padding: 6px 10px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            color: #333;
+        }
+
+        .brush-options {
+            display: flex;
+            gap: 6px;
+        }
+
+        .brush-btn {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #555;
+            cursor: pointer;
+        }
+
+        .brush-btn.active {
+            background: #d32f2f;
+            color: #fff;
+            border-color: #d32f2f;
+        }
+
+        .main-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .sub-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+
+        button {
+            border: none;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        button:active {
+            transform: scale(0.97);
+        }
+
+        .btn-gps {
+            background-color: #d32f2f;
+            color: white;
+            box-shadow: 0 3px 10px rgba(211, 47, 47, 0.3);
+        }
+
+        .btn-gps.active {
+            background-color: #388e3c;
+            animation: pulse 2s infinite;
+        }
+
+        .btn-manual {
+            background-color: #1976d2;
+            color: white;
+        }
+
+        .btn-manual.active {
+            background-color: #f57c00;
+            box-shadow: 0 0 12px rgba(245, 124, 0, 0.6);
+        }
+
+        .btn-secondary {
+            background-color: #f0f0f0;
+            color: #333;
+            font-size: 0.8rem;
+            padding: 8px;
+        }
+
+        .btn-danger {
+            background-color: #ffebee;
+            color: #c62828;
+            font-size: 0.8rem;
+            padding: 8px;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(56, 142, 60, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(56, 142, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(56, 142, 60, 0); }
+        }
+
+        .leaflet-top.leaflet-left {
+            top: 85px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- בר עליון -->
+    <div class="top-bar">
+        <div class="title-area">
+            <h1>
+                🇮🇱 צובעים את ישראל
+                <span id="wake-indicator" class="wake-badge">☀️ מסך דולק</span>
+            </h1>
+            <p id="status-text">מוכן ליציאה לדרך</p>
+        </div>
+        <div class="stats-badge">
+            <span id="points-count">0</span> נקודות<br>
+            <small id="km-count">0.0 ק"מ</small>
+        </div>
+    </div>
+
+    <!-- המפה -->
+    <div id="map"></div>
+
+    <!-- פאנל כפתורים תחתון -->
+    <div class="controls-panel">
+        <!-- בורר עובי צביעה -->
+        <div class="brush-selector">
+            <span><strong>עובי צביעה:</strong></span>
+            <div class="brush-options">
+                <button class="brush-btn" onclick="setBrushSize(25, this)">🚶 הליכה (25מ')</button>
+                <button class="brush-btn active" onclick="setBrushSize(70, this)">🚗 נסיעה (70מ')</button>
+                <button class="brush-btn" onclick="setBrushSize(200, this)">🌍 אזור (200מ')</button>
+            </div>
+        </div>
+
+        <div class="main-buttons">
+            <button id="btn-gps" class="btn-gps" onclick="toggleGPS()">
+                <span>📍</span> התחל מעקב GPS
+            </button>
+            <button id="btn-manual" class="btn-manual" onclick="toggleManualPaint()">
+                <span>🖌️</span> צביעה ידנית
+            </button>
+        </div>
+
+        <div class="sub-buttons">
+            <button class="btn-secondary" onclick="exportData()">💾 גיבוי</button>
+            <button class="btn-secondary" onclick="document.getElementById('file-input').click()">📂 שחזור</button>
+            <button class="btn-danger" onclick="clearAllData()">🗑️ איפוס</button>
+            <input type="file" id="file-input" style="display: none;" accept=".json" onchange="importData(event)">
+        </div>
+    </div>
+
+    <script>
+        // 1. אתחול המפה למרכז ישראל
+        const map = L.map('map', { zoomControl: true }).setView([31.5, 34.9], 8);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // משתנים גלובליים
+        // כל נקודה נשמרת במבנה: [lat, lng, radius]
+        let visitedPoints = []; 
+        let isTrackingGPS = false;
+        let isManualPainting = false;
+        let watchId = null;
+        let currentLocationMarker = null;
+        let wakeLock = null;
+
+        // הגדרות מברשת ברירת מחדל
+        let currentBrushRadius = 70; 
+        let minDistanceMeters = 15;
+
+        // שכבות ציור על המפה
+        const paintLayerGroup = L.layerGroup().addTo(map);
+
+        // 2. טעינת נתונים שמורים מהדפדפן
+        window.onload = function() {
+            const saved = localStorage.getItem('israel_painted_points_v2');
+            // תמיכה גם בגרסה הקודמת אם נשמרה
+            const oldSaved = localStorage.getItem('israel_painted_points');
+            
+            if (saved) {
+                try {
+                    visitedPoints = JSON.parse(saved);
+                    redrawAll();
+                    updateStats();
+                } catch (e) { console.error(e); }
+            } else if (oldSaved) {
+                try {
+                    const oldPoints = JSON.parse(oldSaved);
+                    visitedPoints = oldPoints.map(p => [p[0], p[1], 60]);
+                    saveToStorage();
+                    redrawAll();
+                    updateStats();
+                } catch (e) { console.error(e); }
+            }
+        };
+
+        // 3. שינוי עובי מברשת
+        function setBrushSize(radius, btnElement) {
+            currentBrushRadius = radius;
+            // התאמת המרחק המינימלי בין נקודות לפי גודל המברשת כדי לא להעמיס
+            minDistanceMeters = Math.max(10, Math.round(radius / 4));
+
+            document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('active'));
+            btnElement.classList.add('active');
+        }
+
+        // 4. הוספת נקודה חדשה וצביעה באדום
+        function addPaintedPoint(lat, lng, forceAdd = false) {
+            const newLatLng = L.latLng(lat, lng);
+
+            if (!forceAdd && visitedPoints.length > 0) {
+                const lastPoint = visitedPoints[visitedPoints.length - 1];
+                const lastLatLng = L.latLng(lastPoint[0], lastPoint[1]);
+                const distance = newLatLng.distanceTo(lastLatLng);
+                
+                if (distance < minDistanceMeters) {
+                    return; 
+                }
+            }
+
+            const pointData = [lat, lng, currentBrushRadius];
+            visitedPoints.push(pointData);
+            saveToStorage();
+
+            drawCircle(lat, lng, currentBrushRadius);
+            updateStats();
+        }
+
+        function drawCircle(lat, lng, radius) {
+            L.circle([lat, lng], {
+                color: '#d32f2f',
+                fillColor: '#f44336',
+                fillOpacity: 0.45,
+                weight: 1,
+                radius: radius || 70
+            }).addTo(paintLayerGroup);
+        }
+
+        function redrawAll() {
+            paintLayerGroup.clearLayers();
+            visitedPoints.forEach(pt => {
+                drawCircle(pt[0], pt[1], pt[2] || 70);
+            });
+        }
+
+        // 5. מנגנון השארת מסך דולק (Wake Lock API)
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    document.getElementById('wake-indicator').style.display = 'inline-block';
+                    wakeLock.addEventListener('release', () => {
+                        document.getElementById('wake-indicator').style.display = 'none';
+                    });
+                } catch (err) {
+                    console.log('Wake Lock error:', err);
+                }
+            }
+        }
+
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release();
+                wakeLock = null;
+                document.getElementById('wake-indicator').style.display = 'none';
+            }
+        }
+
+        // החזרת Wake Lock אם חוזרים לאפליקציה
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && isTrackingGPS) {
+                requestWakeLock();
+            }
+        });
+
+        // 6. הפעלה / כיבוי של מעקב GPS חי
+        function toggleGPS() {
+            const btn = document.getElementById('btn-gps');
+            const statusText = document.getElementById('status-text');
+
+            if (!isTrackingGPS) {
+                if (!navigator.geolocation) {
+                    alert("הדפדפן שלך לא תומך ב-GPS");
+                    return;
+                }
+
+                if (isManualPainting) toggleManualPaint();
+
+                isTrackingGPS = true;
+                requestWakeLock(); // משאיר את המסך דולק!
+
+                btn.classList.add('active');
+                btn.innerHTML = '<span>⏹️</span> עצור מעקב GPS';
+                statusText.innerText = "מחפש אות GPS...";
+
+                watchId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const accuracy = Math.round(position.coords.accuracy);
+
+                        statusText.innerText = `צובע בזמן אמת (דיוק: ${accuracy} מ')`;
+
+                        if (!currentLocationMarker) {
+                            currentLocationMarker = L.circleMarker([lat, lng], {
+                                radius: 8,
+                                fillColor: "#2196f3",
+                                color: "#fff",
+                                weight: 3,
+                                fillOpacity: 1
+                            }).addTo(map);
+                            map.setView([lat, lng], 15);
+                        } else {
+                            currentLocationMarker.setLatLng([lat, lng]);
+                        }
+
+                        addPaintedPoint(lat, lng);
+                    },
+                    (error) => {
+                        console.error(error);
+                        statusText.innerText = "שגיאת מיקום - ודא שה-GPS פתוח ומאושר";
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 10000
+                    }
+                );
+
+            } else {
+                isTrackingGPS = false;
+                releaseWakeLock(); // משחרר את נעילת המסך
+
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                btn.classList.remove('active');
+                btn.innerHTML = '<span>📍</span> התחל מעקב GPS';
+                statusText.innerText = "מעקב GPS הופסק";
+            }
+        }
+
+        // 7. מצב צביעה ידני
+        function toggleManualPaint() {
+            const btn = document.getElementById('btn-manual');
+            const statusText = document.getElementById('status-text');
+
+            isManualPainting = !isManualPainting;
+
+            if (isManualPainting) {
+                btn.classList.add('active');
+                btn.innerHTML = '<span>✋</span> סיים צביעה ידנית';
+                statusText.innerText = "לחץ על כל מקום במפה כדי לצבוע אותו באדום";
+            } else {
+                btn.classList.remove('active');
+                btn.innerHTML = '<span>🖌️</span> צביעה ידנית';
+                statusText.innerText = isTrackingGPS ? "צובע בזמן אמת..." : "מוכן ליציאה לדרך";
+            }
+        }
+
+        map.on('click', function(e) {
+            if (isManualPainting) {
+                addPaintedPoint(e.latlng.lat, e.latlng.lng, true);
+            }
+        });
+
+        // 8. חישוב סטטיסטיקות
+        function updateStats() {
+            document.getElementById('points-count').innerText = visitedPoints.length;
+            
+            let totalMeters = 0;
+            for (let i = 1; i < visitedPoints.length; i++) {
+                const p1 = L.latLng(visitedPoints[i-1][0], visitedPoints[i-1][1]);
+                const p2 = L.latLng(visitedPoints[i][0], visitedPoints[i][1]);
+                const dist = p1.distanceTo(p2);
+                if (dist < 500) {
+                    totalMeters += dist;
+                }
+            }
+            const km = (totalMeters / 1000).toFixed(1);
+            document.getElementById('km-count').innerText = `${km} ק"מ`;
+        }
+
+        // 9. שמירה, גיבוי, שחזור ואיפוס
+        function saveToStorage() {
+            localStorage.setItem('israel_painted_points_v2', JSON.stringify(visitedPoints));
+        }
+
+        function clearAllData() {
+            if (confirm("האם אתה בטוח שברצונך למחוק את כל האזורים שצבעת עד היום?")) {
+                visitedPoints = [];
+                localStorage.removeItem('israel_painted_points_v2');
+                localStorage.removeItem('israel_painted_points');
+                paintLayerGroup.clearLayers();
+                updateStats();
+                document.getElementById('status-text').innerText = "המפה אופסה בהצלחה";
+            }
+        }
+
+        function exportData() {
+            if (visitedPoints.length === 0) {
+                alert("אין עדיין נתונים לגיבוי!");
+                return;
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(visitedPoints));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            const date = new Date().toISOString().slice(0,10);
+            downloadAnchor.setAttribute("download", `israel_trips_backup_${date}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        visitedPoints = imported;
+                        saveToStorage();
+                        redrawAll();
+                        updateStats();
+                        alert("הגיבוי שוחזר בהצלחה!");
+                    }
+                } catch (err) {
+                    alert("קובץ הגיבוי אינו תקין.");
+                }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
